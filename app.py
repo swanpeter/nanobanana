@@ -180,8 +180,8 @@ def main() -> None:
     if USERNAME is None or PASSWORD is None:
         st.warning("USERNAME / PASSWORD が設定されていないため、ログイン無しで利用できます。")
 
-    st.title("生成AIで笑いを生み出せ！")
-    st.subheader("架空大喜利")
+    st.title("架空大喜利")
+    st.subheader("生成AIで笑いを生み出せ！")
 
     api_key = load_configured_api_key()
 
