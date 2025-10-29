@@ -88,30 +88,11 @@ def load_configured_api_key() -> str:
 
 
 def render_credentials_info(auth_id: str, auth_password: str, api_key: str) -> None:
-    display_auth_id = auth_id or "(未設定)"
-    display_auth_password = auth_password or "(未設定)"
-    display_api_key = api_key or "(未設定)"
-
     with st.sidebar:
         st.subheader("認証情報")
-        st.caption("現在のログイン情報と Gemini API key です。")
-        st.text_input(
-            "ログイン ID",
-            value=display_auth_id,
-            disabled=True,
-            key="basic_auth_id_display",
-        )
-        st.text_input(
-            "ログイン パスワード",
-            value=display_auth_password,
-            disabled=True,
-            key="basic_auth_password_display",
-        )
-        st.text_input(
-            "Gemini API key",
-            value=display_api_key,
-            disabled=True,
-            key="gemini_api_key_display",
+        st.caption(
+            "ログインID・パスワード・Gemini API key は非表示です。"
+            "Streamlit の設定画面で管理してください。"
         )
 
 
