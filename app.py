@@ -180,11 +180,10 @@ def main() -> None:
     if USERNAME is None or PASSWORD is None:
         st.warning("USERNAME / PASSWORD が設定されていないため、ログイン無しで利用できます。")
 
-    st.title(TITLE)
-    st.write("Gemini にプロンプトを送り、生成された画像を表示します。")
+    st.title("生成AIで笑いを生み出せ！")
+    st.subheader("架空大喜利")
 
     api_key = load_configured_api_key()
-    st.caption("Gemini API key は Streamlit の設定画面で管理してください。")
 
     prompt = st.text_area("Prompt", height=150, placeholder="描いてほしい内容を入力してください")
     enforce_no_text = st.toggle("画像にテキストや文字を含めない", value=False)
