@@ -38,6 +38,16 @@ def get_secret_value(key: str) -> Optional[str]:
     return None
 
 
+def rerun_app() -> None:
+    rerun = getattr(st, "rerun", None)
+    if callable(rerun):
+        rerun()
+        return
+    experimental_rerun = getattr(st, "experimental_rerun", None)
+    if callable(experimental_rerun):
+        experimental_rerun()
+
+
 TITLE = "Gemini 画像生成"
 MODEL_NAME = "models/gemini-2.5-flash-image-preview"
 DEFAULT_PROMPT_SUFFIX = (
@@ -59,7 +69,7 @@ def on_login() -> None:
     ) == PASSWORD:
         st.session_state.logged_in = True
         st.success("ログインに成功しました！")
-        st.experimental_rerun()
+        rerun_app()
     else:
         st.error("ユーザー名またはパスワードが間違っています。")
 
