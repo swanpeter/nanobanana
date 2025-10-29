@@ -87,15 +87,6 @@ def load_configured_api_key() -> str:
     return get_secret_value("GEMINI_API_KEY") or DEFAULT_GEMINI_API_KEY
 
 
-def render_credentials_info(auth_id: str, auth_password: str, api_key: str) -> None:
-    with st.sidebar:
-        st.subheader("認証情報")
-        st.caption(
-            "ログインID・パスワード・Gemini API key は非表示です。"
-            "Streamlit の設定画面で管理してください。"
-        )
-
-
 def decode_image_data(data: Optional[object]) -> Optional[bytes]:
     if data is None:
         return None
@@ -194,7 +185,6 @@ def main() -> None:
 
     api_key = load_configured_api_key()
     st.caption("Gemini API key は Streamlit の設定画面で管理してください。")
-    render_credentials_info(USERNAME or "", PASSWORD or "", api_key)
 
     prompt = st.text_area("Prompt", height=150, placeholder="描いてほしい内容を入力してください")
     enforce_no_text = st.toggle("画像にテキストや文字を含めない", value=False)
