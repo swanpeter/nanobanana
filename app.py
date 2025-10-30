@@ -354,9 +354,67 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     image_src = f"data:image/png;base64,{encoded}"
     image_src_json = json.dumps(image_src)
     components.html(
-        f"""
-        <img src="{image_src}" alt="Generated image" class="streamlit-lightbox-thumb" onclick="if(window.parent && window.parent.__streamlitLightbox){{window.parent.__streamlitLightbox.show({image_src_json});}}"/>
-        """,
+        f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            background: transparent;
+        }}
+        img {{
+            width: 100%;
+            display: block;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.16s ease-in-out;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+        }}
+        img:hover {{
+            transform: scale(1.02);
+        }}
+    </style>
+</head>
+<body>
+    <img id="thumb" src="{image_src}" alt="Generated image">
+    <script>
+    (function() {{
+        const img = document.getElementById("thumb");
+        if (!img) {{
+            return;
+        }}
+
+        function resizeFrame() {{
+            const frame = window.frameElement;
+            if (!frame) {{
+                return;
+            }}
+            const frameWidth = frame.getBoundingClientRect().width || img.naturalWidth || img.clientWidth || 0;
+            const ratio = img.naturalWidth ? (img.naturalHeight / Math.max(img.naturalWidth, 1)) : (img.clientHeight / Math.max(img.clientWidth, 1) || 1);
+            const height = frameWidth ? Math.max(160, frameWidth * ratio) : (img.clientHeight || img.naturalHeight || 320);
+            frame.style.height = height + "px";
+        }}
+
+        if (img.complete) {{
+            resizeFrame();
+        }} else {{
+            img.addEventListener("load", resizeFrame);
+        }}
+        window.addEventListener("resize", resizeFrame);
+        setTimeout(resizeFrame, 60);
+
+        img.addEventListener("click", function() {{
+            if (window.parent && window.parent.__streamlitLightbox) {{
+                window.parent.__streamlitLightbox.show({image_src_json});
+            }}
+        }});
+    }})();
+    </script>
+</body>
+</html>
+""",
         height=0,
         scrolling=False,
     )
