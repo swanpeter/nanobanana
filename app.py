@@ -434,7 +434,7 @@ def ensure_lightbox_assets() -> None:
         })();
         </script>
         """,
-        height=0,
+        height=700,
         scrolling=False,
     )
 
