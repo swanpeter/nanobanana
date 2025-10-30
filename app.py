@@ -387,7 +387,7 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
 </html>
 """
 
-    components.html(html, height=300, scrolling=False)
+    components.html(html, height=0, scrolling=False)
 
 
 def render_history() -> None:
