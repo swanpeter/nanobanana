@@ -236,14 +236,9 @@ def collect_text_parts(response: object) -> List[str]:
 def init_history() -> None:
     if "history" not in st.session_state:
         st.session_state.history: List[Dict[str, object]] = []
-    if "_lightbox_assets_injected" not in st.session_state:
-        st.session_state["_lightbox_assets_injected"] = False
 
 
 def ensure_lightbox_assets() -> None:
-    if st.session_state.get("_lightbox_assets_injected"):
-        return
-    st.session_state["_lightbox_assets_injected"] = True
     components.html(
         """
         <script>
