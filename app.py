@@ -203,20 +203,111 @@ def extract_parts(candidate: object) -> Sequence:
 
 
 def collect_image_bytes(response: object) -> Optional[bytes]:
-    candidates = getattr(response, "candidates", None) or []
-    for candidate in candidates:
-        for part in extract_parts(candidate):
-            inline = getattr(part, "inline_data", None)
-            if inline is None and isinstance(part, dict):
-                inline = part.get("inline_data")
-            if inline is None:
-                continue
-            data = getattr(inline, "data", None)
-            if data is None and isinstance(inline, dict):
-                data = inline.get("data")
-            image_bytes = decode_image_data(data)
-            if image_bytes:
-                return image_bytes
+    visited: set[int] = set()
+    queue: List[object] = []
+
+    if response is not None:
+        queue.append(response)
+
+    def handle_inline(container: object) -> Optional[bytes]:
+        if container is None:
+            return None
+        data = getattr(container, "data", None)
+        if data is None and isinstance(container, dict):
+            data = container.get("data")
+        return decode_image_data(data)
+
+    def maybe_file_data(container: object) -> Optional[bytes]:
+        if container is None:
+            return None
+        file_data = getattr(container, "file_data", None)
+        if file_data is None and isinstance(container, dict):
+            file_data = container.get("file_data")
+        if file_data:
+            data = getattr(file_data, "data", None)
+            if data is None and isinstance(file_data, dict):
+                data = file_data.get("data")
+            decoded = decode_image_data(data)
+            if decoded:
+                return decoded
+        return None
+
+    base64_charset = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
+
+    while queue:
+        current = queue.pop(0)
+        if current is None:
+            continue
+
+        if isinstance(current, bytes):
+            if current:
+                return current
+            continue
+
+        if isinstance(current, (bytearray, memoryview)):
+            as_bytes = bytes(current)
+            if as_bytes:
+                return as_bytes
+            continue
+
+        if isinstance(current, str):
+            candidate = current.strip()
+            if len(candidate) > 80 and set(candidate) <= base64_charset:
+                decoded = decode_image_data(candidate)
+                if decoded:
+                    return decoded
+            continue
+
+        obj_id = id(current)
+        if obj_id in visited:
+            continue
+        visited.add(obj_id)
+
+        if isinstance(current, dict):
+            inline = current.get("inline_data")
+            decoded = handle_inline(inline)
+            if decoded:
+                return decoded
+
+            decoded = maybe_file_data(current)
+            if decoded:
+                return decoded
+
+            for key, value in current.items():
+                if key in {"data", "image", "blob"}:
+                    decoded = decode_image_data(value)
+                    if decoded:
+                        return decoded
+                queue.append(value)
+            continue
+
+        decoded = handle_inline(getattr(current, "inline_data", None))
+        if decoded:
+            return decoded
+
+        decoded = maybe_file_data(current)
+        if decoded:
+            return decoded
+
+        for attr in (
+            "candidates",
+            "content",
+            "parts",
+            "generated_content",
+            "contents",
+            "responses",
+            "messages",
+            "media",
+            "image",
+            "images",
+        ):
+            value = getattr(current, attr, None)
+            if value is not None:
+                queue.append(value)
+
+        if isinstance(current, Sequence) and not isinstance(current, (str, bytes, bytearray, memoryview)):
+            queue.extend(list(current))
+
     return None
 
 
