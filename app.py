@@ -1,5 +1,6 @@
 import base64
 import os
+import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import streamlit as st
@@ -234,6 +235,73 @@ def init_history() -> None:
         st.session_state.history: List[Dict[str, object]] = []
 
 
+def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    html = f"""
+    <style>
+    .clickable-thumb-{element_id} {{
+        width: 100%;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: transform 0.2s ease-in-out;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    }}
+    .clickable-thumb-{element_id}:hover {{
+        transform: scale(1.02);
+    }}
+    #modal-{element_id} {{
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }}
+    #modal-{element_id} img {{
+        max-width: 90vw;
+        max-height: 90vh;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+    }}
+    </style>
+    <img src="data:image/png;base64,{encoded}"
+         alt="Generated image"
+         class="clickable-thumb-{element_id}"
+         onclick="document.getElementById('modal-{element_id}').style.display='flex';">
+    <div id="modal-{element_id}"
+         onclick="this.style.display='none';"
+         style="display:none;">
+        <img src="data:image/png;base64,{encoded}" alt="Generated image fullscreen">
+    </div>
+    <script>
+    (function() {{
+        const modal = document.getElementById('modal-{element_id}');
+        if (modal && !modal.classList.contains('enhanced')) {{
+            modal.classList.add('enhanced');
+            const observer = new MutationObserver(function(mutations) {{
+                mutations.forEach(function(mutation) {{
+                    if (mutation.attributeName === 'style' && modal.style.display === 'flex') {{
+                        document.body.style.overflow = 'hidden';
+                    }} else {{
+                        document.body.style.overflow = '';
+                    }}
+                }});
+            }});
+            observer.observe(modal, {{ attributes: true, attributeFilter: ['style'] }});
+            document.addEventListener('keydown', function(event) {{
+                if (event.key === 'Escape' && modal.style.display === 'flex') {{
+                    modal.style.display = 'none';
+                }}
+            }});
+        }}
+    }})();
+    </script>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render_history() -> None:
     if not st.session_state.history:
         return
@@ -243,10 +311,11 @@ def render_history() -> None:
         image_bytes = entry.get("image_bytes")
         prompt_text = entry.get("prompt") or ""
         if image_bytes:
-            st.image(
-                image_bytes,
-                use_container_width=True,
-            )
+            image_id = entry.get("id")
+            if not isinstance(image_id, str):
+                image_id = f"img_{uuid.uuid4().hex}"
+                entry["id"] = image_id
+            render_clickable_image(image_bytes, image_id)
         prompt_display = prompt_text.strip()
         st.markdown("**Prompt**")
         st.write(prompt_display if prompt_display else "(未入力)")
@@ -283,7 +352,7 @@ def main() -> None:
         if enforce_no_text:
             prompt_for_request = f"{prompt_for_request}\n{NO_TEXT_TOGGLE_SUFFIX}"
 
-        with st.spinner("Gemini が画像を生成しています..."):
+        with st.spinner("画像を生成しています..."):
             try:
                 response = client.models.generate_content(
                     model=MODEL_NAME,
@@ -315,6 +384,7 @@ def main() -> None:
         st.session_state.history.insert(
             0,
             {
+                "id": f"img_{uuid.uuid4().hex}",
                 "image_bytes": image_bytes,
                 "prompt": user_prompt,
                 "model": MODEL_NAME,
