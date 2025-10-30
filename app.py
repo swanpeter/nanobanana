@@ -1,5 +1,6 @@
 import base64
-from typing import List, Optional, Sequence, Tuple
+import os
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import streamlit as st
 
@@ -58,7 +59,82 @@ NO_TEXT_TOGGLE_SUFFIX = (
     "no signboard, no watermark, no logo, no text, no subtitles, no labels, no poster elements, neutral background))"
 )
 
-DEFAULT_GEMINI_API_KEY = get_secret_value("GEMINI_API_KEY") or ""
+DEFAULT_GEMINI_API_KEY = (
+    get_secret_value("GEMINI_API_KEY")
+    or os.getenv("GOOGLE_API_KEY")
+    or os.getenv("GEMINI_API_KEY")
+    or ""
+)
+
+
+def _normalize_credential(value: Optional[str]) -> Optional[str]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def get_secret_auth_credentials() -> Tuple[Optional[str], Optional[str]]:
+    try:
+        secrets_obj = st.secrets
+    except StreamlitSecretNotFoundError:
+        return None, None
+    except Exception:
+        return None, None
+
+    auth_section: Optional[Dict[str, Any]] = None
+    if isinstance(secrets_obj, dict):
+        auth_section = secrets_obj.get("auth")
+    else:
+        auth_section = getattr(secrets_obj, "get", lambda _key, _default=None: None)("auth")
+
+    if not isinstance(auth_section, dict):
+        return None, None
+
+    username = auth_section.get("username") or auth_section.get("id")
+    password = auth_section.get("password") or auth_section.get("pass")
+
+    normalized_username = _normalize_credential(str(username)) if username is not None else None
+    normalized_password = _normalize_credential(str(password)) if password is not None else None
+    return normalized_username, normalized_password
+
+
+def get_configured_auth_credentials() -> Tuple[str, str]:
+    secret_username, secret_password = get_secret_auth_credentials()
+    if secret_username and secret_password:
+        return secret_username, secret_password
+    return "mezamashi", "mezamashi"
+
+
+def require_login() -> None:
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if st.session_state["authenticated"]:
+        return
+
+    st.title("ログイン")
+
+    username, password = get_configured_auth_credentials()
+    if not username or not password:
+        st.info("ログイン情報が未設定です。管理者に連絡してください。")
+        st.stop()
+        return
+
+    with st.form("login_form", clear_on_submit=False):
+        input_username = st.text_input("ID")
+        input_password = st.text_input("PASS", type="password")
+        submitted = st.form_submit_button("ログイン")
+
+    if submitted:
+        if input_username == username and input_password == password:
+            st.session_state["authenticated"] = True
+            st.success("ログインしました。")
+            rerun_app()
+            return
+        st.error("IDまたはPASSが正しくありません。")
+    st.stop()
 
 
 def get_current_api_key() -> Optional[str]:
@@ -66,32 +142,6 @@ def get_current_api_key() -> Optional[str]:
     if isinstance(api_key, str) and api_key.strip():
         return api_key.strip()
     return DEFAULT_GEMINI_API_KEY
-
-
-def render_configuration_controls() -> None:
-    with st.expander("設定", expanded=False):
-        st.caption(
-            "このセッションで利用する Gemini API key を設定できます。"
-            "空欄の場合は未設定として扱われます。"
-        )
-
-        prev_api_key = get_current_api_key()
-
-        with st.form("config_form"):
-            api_key = st.text_input(
-                "Gemini API key",
-                value=prev_api_key or "",
-                type="password",
-                key="config_form_api_key",
-            )
-            submitted = st.form_submit_button("設定を保存")
-            if submitted:
-                normalized_api_key = api_key.strip() or None
-
-                st.session_state["config_api_key"] = normalized_api_key
-
-                st.success("設定を保存しました。")
-                rerun_app()
 
 
 def load_configured_api_key() -> str:
@@ -174,9 +224,9 @@ def render_history() -> None:
 def main() -> None:
     st.set_page_config(page_title=TITLE, page_icon="🖼️", layout="centered")
     init_history()
+    require_login()
 
     st.title("脳内大喜利")
-    render_configuration_controls()
 
     api_key = load_configured_api_key()
 
@@ -185,7 +235,7 @@ def main() -> None:
 
     if st.button("Generate", type="primary"):
         if not api_key:
-            st.warning("設定から Gemini API key を入力してください。")
+            st.warning("Gemini API key が設定されていません。Streamlit secrets などで設定してください。")
             st.stop()
         if not prompt.strip():
             st.warning("プロンプトを入力してください。")
