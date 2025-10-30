@@ -58,33 +58,104 @@ NO_TEXT_TOGGLE_SUFFIX = (
     "no signboard, no watermark, no logo, no text, no subtitles, no labels, no poster elements, neutral background))"
 )
 
-USERNAME = get_secret_value("USERNAME")
-PASSWORD = get_secret_value("PASSWORD")
+DEFAULT_USERNAME = get_secret_value("USERNAME")
+DEFAULT_PASSWORD = get_secret_value("PASSWORD")
 DEFAULT_GEMINI_API_KEY = get_secret_value("GEMINI_API_KEY") or ""
 
 
-def on_login() -> None:
-    if st.session_state.get("username_input") == USERNAME and st.session_state.get(
-        "password_input"
-    ) == PASSWORD:
-        st.session_state.logged_in = True
+def get_current_username() -> Optional[str]:
+    username = st.session_state.get("config_username")
+    if isinstance(username, str) and username.strip():
+        return username.strip()
+    return DEFAULT_USERNAME
+
+
+def get_current_password() -> Optional[str]:
+    password = st.session_state.get("config_password")
+    if isinstance(password, str) and password.strip():
+        return password.strip()
+    return DEFAULT_PASSWORD
+
+
+def get_current_api_key() -> Optional[str]:
+    api_key = st.session_state.get("config_api_key")
+    if isinstance(api_key, str) and api_key.strip():
+        return api_key.strip()
+    return DEFAULT_GEMINI_API_KEY
+
+
+def render_configuration_controls() -> None:
+    with st.expander("設定", expanded=False):
+        st.caption(
+            "このセッションで利用する Basic 認証情報と Gemini API key を設定できます。"
+            "空欄の場合は未設定として扱われます。"
+        )
+
+        prev_username = get_current_username()
+        prev_password = get_current_password()
+        prev_api_key = get_current_api_key()
+
+        with st.form("config_form"):
+            username = st.text_input(
+                "Basic 認証 ID",
+                value=prev_username or "",
+                key="config_form_username",
+            )
+            password = st.text_input(
+                "Basic 認証 パスワード",
+                value=prev_password or "",
+                type="password",
+                key="config_form_password",
+            )
+            api_key = st.text_input(
+                "Gemini API key",
+                value=prev_api_key or "",
+                type="password",
+                key="config_form_api_key",
+            )
+            submitted = st.form_submit_button("設定を保存")
+            if submitted:
+                normalized_username = username.strip() or None
+                normalized_password = password.strip() or None
+                normalized_api_key = api_key.strip() or None
+
+                st.session_state["config_username"] = normalized_username
+                st.session_state["config_password"] = normalized_password
+                st.session_state["config_api_key"] = normalized_api_key
+
+                if (
+                    normalized_username != prev_username
+                    or normalized_password != prev_password
+                ):
+                    st.session_state["logged_in"] = False
+
+                st.success("設定を保存しました。")
+                rerun_app()
+
+
+def on_login(expected_username: Optional[str], expected_password: Optional[str]) -> None:
+    if (
+        st.session_state.get("username_input") == (expected_username or "")
+        and st.session_state.get("password_input") == (expected_password or "")
+    ):
+        st.session_state["logged_in"] = True
         st.success("ログインに成功しました！")
         rerun_app()
     else:
         st.error("ユーザー名またはパスワードが間違っています。")
 
 
-def login() -> None:
+def login(expected_username: Optional[str], expected_password: Optional[str]) -> None:
     with st.form("login_form"):
         st.text_input("ユーザー名", key="username_input")
         st.text_input("パスワード", type="password", key="password_input")
         submitted = st.form_submit_button("ログイン")
         if submitted:
-            on_login()
+            on_login(expected_username, expected_password)
 
 
 def load_configured_api_key() -> str:
-    return get_secret_value("GEMINI_API_KEY") or DEFAULT_GEMINI_API_KEY
+    return get_current_api_key() or ""
 
 
 def decode_image_data(data: Optional[object]) -> Optional[bytes]:
@@ -161,27 +232,26 @@ def render_history() -> None:
 
 
 def main() -> None:
+    st.set_page_config(page_title=TITLE, page_icon="🖼️", layout="centered")
     init_history()
 
     if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+        st.session_state["logged_in"] = False
 
-    if not st.session_state.logged_in:
-        if USERNAME is None or PASSWORD is None:
-            st.session_state.logged_in = True
-        else:
-            st.set_page_config(page_title="ログイン", page_icon="🔒", layout="centered")
+    current_username = get_current_username()
+    current_password = get_current_password()
+
+    if not st.session_state["logged_in"]:
+        if current_username and current_password:
             st.title("🔑 ログインページ")
-            login()
+            render_configuration_controls()
+            login(current_username, current_password)
             return
+        st.warning("Basic認証のID/PASSが設定されていないため、ログインなしで利用できます。")
+        st.session_state["logged_in"] = True
 
-    st.set_page_config(page_title=TITLE, page_icon="🖼️", layout="centered")
-
-    if USERNAME is None or PASSWORD is None:
-        st.warning("USERNAME / PASSWORD が設定されていないため、ログイン無しで利用できます。")
-
-    st.title("架空大喜利")
-    st.subheader("生成AIで笑いを生み出せ！")
+    st.title("脳内大喜利")
+    render_configuration_controls()
 
     api_key = load_configured_api_key()
 
@@ -190,7 +260,7 @@ def main() -> None:
 
     if st.button("Generate", type="primary"):
         if not api_key:
-            st.warning("Streamlit の設定画面で Gemini API key を設定してください。")
+            st.warning("設定から Gemini API key を入力してください。")
             st.stop()
         if not prompt.strip():
             st.warning("プロンプトを入力してください。")
