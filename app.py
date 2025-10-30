@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -237,102 +238,133 @@ def init_history() -> None:
 
 def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
+    container_id = f"lightbox-container-{element_id}"
+    image_src = f"data:image/png;base64,{encoded}"
+    image_src_json = json.dumps(image_src)
     html = f"""
     <style>
-    .clickable-thumb-{element_id} {{
+    #{container_id} {{
+        width: 100%;
+    }}
+    #{container_id} img {{
         width: 100%;
         border-radius: 12px;
         cursor: pointer;
-        transition: transform 0.2s ease-in-out;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+        transition: transform 0.18s ease-in-out;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     }}
-    .clickable-thumb-{element_id}:hover {{
+    #{container_id} img:hover {{
         transform: scale(1.02);
     }}
     </style>
-    <img src="data:image/png;base64,{encoded}"
-         alt="Generated image"
-         class="clickable-thumb-{element_id}"
-         onclick="window.showLightbox_{element_id}();">
+    <div id="{container_id}">
+        <img src="{image_src}" alt="Generated image">
+    </div>
     <script>
     (function() {{
-        if (!window.__streamlitLightbox) {{
-            window.__streamlitLightbox = {{
-                closeCurrent: function() {{
-                    const overlay = document.getElementById('streamlit-lightbox-overlay');
-                    if (overlay) {{
-                        overlay.classList.remove('visible');
-                        const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
-                        document.body.style.overflow = originalOverflow;
-                        setTimeout(function() {{
-                            if (overlay.parentNode) {{
-                                overlay.parentNode.removeChild(overlay);
-                            }}
-                        }}, 160);
+        const containerId = "{container_id}";
+        const imageSrc = {image_src_json};
+
+        function ensureHelpers() {{
+            if (window.__streamlitLightbox) {{
+                return;
+            }}
+            window.__streamlitLightbox = (function() {{
+                let overlay = null;
+                let keyHandler = null;
+
+                function hide() {{
+                    if (!overlay) {{
+                        return;
+                    }}
+                    overlay.style.opacity = '0';
+                    const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
+                    document.body.style.overflow = originalOverflow;
+                    setTimeout(function() {{
+                        if (overlay && overlay.parentNode) {{
+                            overlay.parentNode.removeChild(overlay);
+                        }}
+                        overlay = null;
+                    }}, 160);
+                    if (keyHandler) {{
+                        document.removeEventListener('keydown', keyHandler);
+                        keyHandler = null;
                     }}
                 }}
-            }};
+
+                function show(src) {{
+                    hide();
+                    overlay = document.createElement('div');
+                    overlay.id = 'streamlit-lightbox-overlay';
+                    overlay.setAttribute('data-original-overflow', document.body.style.overflow || '');
+                    overlay.style.position = 'fixed';
+                    overlay.style.zIndex = '10000';
+                    overlay.style.top = '0';
+                    overlay.style.left = '0';
+                    overlay.style.right = '0';
+                    overlay.style.bottom = '0';
+                    overlay.style.background = 'rgba(0, 0, 0, 0.92)';
+                    overlay.style.display = 'flex';
+                    overlay.style.justifyContent = 'center';
+                    overlay.style.alignItems = 'center';
+                    overlay.style.padding = '0';
+                    overlay.style.cursor = 'zoom-out';
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.16s ease-in-out';
+
+                    const image = new Image();
+                    image.src = src;
+                    image.alt = 'Generated image fullscreen';
+                    image.style.maxWidth = '100vw';
+                    image.style.maxHeight = '100vh';
+                    image.style.objectFit = 'contain';
+                    image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.45)';
+                    image.style.cursor = 'inherit';
+
+                    overlay.appendChild(image);
+                    overlay.addEventListener('click', hide);
+
+                    keyHandler = function(event) {{
+                        if (event.key === 'Escape') {{
+                            hide();
+                        }}
+                    }};
+                    document.addEventListener('keydown', keyHandler);
+
+                    document.body.appendChild(overlay);
+                    overlay.offsetWidth;  // force reflow for transition
+                    document.body.style.overflow = 'hidden';
+                    overlay.style.opacity = '1';
+                }}
+
+                return {{ show, hide }};
+            }})();
         }}
-        window.showLightbox_{element_id} = function() {{
-            window.__streamlitLightbox.closeCurrent();
-            const overlay = document.createElement('div');
-            overlay.id = 'streamlit-lightbox-overlay';
-            overlay.setAttribute('data-original-overflow', document.body.style.overflow || '');
-            overlay.style.position = 'fixed';
-            overlay.style.zIndex = '10000';
-            overlay.style.top = '0';
-            overlay.style.left = '0';
-            overlay.style.right = '0';
-            overlay.style.bottom = '0';
-            overlay.style.background = 'rgba(0, 0, 0, 0.88)';
-            overlay.style.display = 'flex';
-            overlay.style.justifyContent = 'center';
-            overlay.style.alignItems = 'center';
-            overlay.style.width = '100vw';
-            overlay.style.height = '100vh';
-            overlay.style.padding = '0';
-            overlay.style.cursor = 'zoom-out';
-            overlay.style.opacity = '0';
-            overlay.style.transition = 'opacity 0.16s ease-in-out';
 
-            const image = new Image();
-            image.src = "data:image/png;base64,{encoded}";
-            image.alt = "Generated image fullscreen";
-            image.style.maxWidth = '100vw';
-            image.style.maxHeight = '100vh';
-            image.style.objectFit = 'contain';
-            image.style.borderRadius = '0';
-            image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.4)';
-            image.style.cursor = 'inherit';
+        function bindImage() {{
+            const container = document.getElementById(containerId);
+            if (!container) {{
+                window.setTimeout(bindImage, 50);
+                return;
+            }}
+            if (container.dataset.lightboxBound === '1') {{
+                return;
+            }}
+            container.dataset.lightboxBound = '1';
 
-            overlay.appendChild(image);
-            document.body.appendChild(overlay);
-            document.body.style.overflow = 'hidden';
-            requestAnimationFrame(function() {{
-                overlay.style.opacity = '1';
+            const img = container.querySelector('img');
+            if (!img) {{
+                return;
+            }}
+
+            ensureHelpers();
+
+            img.addEventListener('click', function() {{
+                window.__streamlitLightbox.show(imageSrc);
             }});
+        }}
 
-            function closeLightbox() {{
-                overlay.style.opacity = '0';
-                const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
-                document.body.style.overflow = originalOverflow;
-                setTimeout(function() {{
-                    if (overlay.parentNode) {{
-                        overlay.parentNode.removeChild(overlay);
-                    }}
-                }}, 160);
-                document.removeEventListener('keydown', onKeyDown);
-            }}
-
-            function onKeyDown(event) {{
-                if (event.key === 'Escape') {{
-                    closeLightbox();
-                }}
-            }}
-
-            overlay.addEventListener('click', closeLightbox);
-            document.addEventListener('keydown', onKeyDown);
-        }};
+        bindImage();
     }})();
     </script>
     """
