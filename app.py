@@ -89,11 +89,40 @@ def get_secret_auth_credentials() -> Tuple[Optional[str], Optional[str]]:
     else:
         auth_section = getattr(secrets_obj, "get", lambda _key, _default=None: None)("auth")
 
-    if not isinstance(auth_section, dict):
-        return None, None
+    def _get_from_container(container: object, key: str) -> Optional[Any]:
+        if isinstance(container, dict):
+            return container.get(key)
+        getter = getattr(container, "get", None)
+        if callable(getter):
+            try:
+                return getter(key)
+            except TypeError:
+                try:
+                    return getter(key, None)
+                except TypeError:
+                    return None
+        try:
+            return getattr(container, key)
+        except AttributeError:
+            return None
 
-    username = auth_section.get("username") or auth_section.get("id")
-    password = auth_section.get("password") or auth_section.get("pass")
+    def _extract_credential(container: object, keys: Tuple[str, ...]) -> Optional[Any]:
+        for key in keys:
+            value = _get_from_container(container, key)
+            if value is not None:
+                return value
+        return None
+
+    username = None
+    password = None
+    if auth_section is not None:
+        username = _extract_credential(auth_section, ("username", "id", "user", "name"))
+        password = _extract_credential(auth_section, ("password", "pass", "pwd"))
+
+    if username is None:
+        username = get_secret_value("USERNAME") or get_secret_value("ID")
+    if password is None:
+        password = get_secret_value("PASSWORD") or get_secret_value("PASS")
 
     normalized_username = _normalize_credential(str(username)) if username is not None else None
     normalized_password = _normalize_credential(str(password)) if password is not None else None
