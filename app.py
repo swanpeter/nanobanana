@@ -335,10 +335,16 @@ def ensure_lightbox_assets() -> None:
         <script>
         (function () {
             const parentWindow = window.parent;
-            if (!parentWindow || parentWindow.__streamlitLightboxInitialized) {
+            if (!parentWindow) {
                 return;
             }
-            parentWindow.__streamlitLightboxInitialized = true;
+
+            try {
+                delete parentWindow.__streamlitLightbox;
+            } catch (err) {
+                parentWindow.__streamlitLightbox = undefined;
+            }
+            parentWindow.__streamlitLightboxInitialized = false;
             const doc = parentWindow.document;
 
             if (!doc.getElementById("streamlit-lightbox-style")) {
