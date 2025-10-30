@@ -5,6 +5,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 try:
     from streamlit.runtime.secrets import StreamlitSecretNotFoundError
@@ -238,38 +239,64 @@ def init_history() -> None:
 
 def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
-    container_id = f"lightbox-container-{element_id}"
     image_src = f"data:image/png;base64,{encoded}"
     image_src_json = json.dumps(image_src)
-    html = f"""
-    <style>
-    #{container_id} {{
-        width: 100%;
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body {{
+        margin: 0;
+        background: transparent;
     }}
-    #{container_id} img {{
+    img {{
         width: 100%;
+        display: block;
         border-radius: 12px;
         cursor: pointer;
         transition: transform 0.18s ease-in-out;
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     }}
-    #{container_id} img:hover {{
+    img:hover {{
         transform: scale(1.02);
     }}
-    </style>
-    <div id="{container_id}">
-        <img src="{image_src}" alt="Generated image">
-    </div>
+</style>
+</head>
+<body>
+    <img id="thumb" src="{image_src}" alt="Generated image">
     <script>
     (function() {{
-        const containerId = "{container_id}";
-        const imageSrc = {image_src_json};
+        const img = document.getElementById('thumb');
+        const parentWindow = window.parent;
+        const parentDoc = parentWindow.document;
 
-        function ensureHelpers() {{
-            if (window.__streamlitLightbox) {{
+        function adjustFrameHeight() {{
+            const frame = window.frameElement;
+            if (!frame || !img) {{
                 return;
             }}
-            window.__streamlitLightbox = (function() {{
+            const frameWidth = frame.getBoundingClientRect().width || img.clientWidth || img.naturalWidth || 0;
+            const ratio = img.naturalWidth ? img.naturalHeight / Math.max(img.naturalWidth, 1) : (img.clientHeight / Math.max(img.clientWidth, 1) || 1);
+            const height = frameWidth ? Math.max(120, frameWidth * ratio) : (img.clientHeight || img.naturalHeight || 320);
+            frame.style.height = height + 'px';
+        }}
+
+        if (img.complete) {{
+            adjustFrameHeight();
+        }} else {{
+            img.addEventListener('load', () => {{
+                adjustFrameHeight();
+            }});
+        }}
+        window.addEventListener('resize', adjustFrameHeight);
+        setTimeout(adjustFrameHeight, 50);
+
+        function initLightbox() {{
+            if (parentWindow.__streamlitLightbox) {{
+                return;
+            }}
+            parentWindow.__streamlitLightbox = (function() {{
                 let overlay = null;
                 let keyHandler = null;
 
@@ -279,47 +306,47 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                     }}
                     overlay.style.opacity = '0';
                     const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
-                    document.body.style.overflow = originalOverflow;
+                    parentDoc.body.style.overflow = originalOverflow;
                     setTimeout(function() {{
                         if (overlay && overlay.parentNode) {{
                             overlay.parentNode.removeChild(overlay);
                         }}
                         overlay = null;
-                    }}, 160);
+                    }}, 180);
                     if (keyHandler) {{
-                        document.removeEventListener('keydown', keyHandler);
+                        parentWindow.removeEventListener('keydown', keyHandler);
                         keyHandler = null;
                     }}
                 }}
 
                 function show(src) {{
                     hide();
-                    overlay = document.createElement('div');
+                    overlay = parentDoc.createElement('div');
                     overlay.id = 'streamlit-lightbox-overlay';
-                    overlay.setAttribute('data-original-overflow', document.body.style.overflow || '');
                     overlay.style.position = 'fixed';
                     overlay.style.zIndex = '10000';
                     overlay.style.top = '0';
                     overlay.style.left = '0';
                     overlay.style.right = '0';
                     overlay.style.bottom = '0';
-                    overlay.style.background = 'rgba(0, 0, 0, 0.92)';
                     overlay.style.display = 'flex';
                     overlay.style.justifyContent = 'center';
                     overlay.style.alignItems = 'center';
-                    overlay.style.padding = '0';
+                    overlay.style.background = 'rgba(0, 0, 0, 0.92)';
                     overlay.style.cursor = 'zoom-out';
                     overlay.style.opacity = '0';
-                    overlay.style.transition = 'opacity 0.16s ease-in-out';
+                    overlay.style.transition = 'opacity 0.18s ease-in-out';
+                    overlay.setAttribute('data-original-overflow', parentDoc.body.style.overflow || '');
+                    parentDoc.body.style.overflow = 'hidden';
 
-                    const image = new Image();
+                    const image = parentDoc.createElement('img');
                     image.src = src;
                     image.alt = 'Generated image fullscreen';
                     image.style.maxWidth = '100vw';
                     image.style.maxHeight = '100vh';
                     image.style.objectFit = 'contain';
-                    image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.45)';
-                    image.style.cursor = 'inherit';
+                    image.style.boxShadow = '0 20px 45px rgba(0, 0, 0, 0.5)';
+                    image.style.borderRadius = '0';
 
                     overlay.appendChild(image);
                     overlay.addEventListener('click', hide);
@@ -329,46 +356,30 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                             hide();
                         }}
                     }};
-                    document.addEventListener('keydown', keyHandler);
+                    parentWindow.addEventListener('keydown', keyHandler);
 
-                    document.body.appendChild(overlay);
-                    overlay.offsetWidth;  // force reflow for transition
-                    document.body.style.overflow = 'hidden';
-                    overlay.style.opacity = '1';
+                    parentDoc.body.appendChild(overlay);
+                    requestAnimationFrame(function() {{
+                        overlay.style.opacity = '1';
+                    }});
                 }}
 
                 return {{ show, hide }};
             }})();
         }}
 
-        function bindImage() {{
-            const container = document.getElementById(containerId);
-            if (!container) {{
-                window.setTimeout(bindImage, 50);
-                return;
-            }}
-            if (container.dataset.lightboxBound === '1') {{
-                return;
-            }}
-            container.dataset.lightboxBound = '1';
+        initLightbox();
 
-            const img = container.querySelector('img');
-            if (!img) {{
-                return;
-            }}
-
-            ensureHelpers();
-
-            img.addEventListener('click', function() {{
-                window.__streamlitLightbox.show(imageSrc);
-            }});
-        }}
-
-        bindImage();
+        img.addEventListener('click', function() {{
+            initLightbox();
+            parentWindow.__streamlitLightbox.show({image_src_json});
+        }});
     }})();
     </script>
+</body>
+</html>
     """
-    st.markdown(html, unsafe_allow_html=True)
+    components.html(html, height=0, scrolling=False)
 
 
 def render_history() -> None:
