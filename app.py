@@ -249,53 +249,87 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     .clickable-thumb-{element_id}:hover {{
         transform: scale(1.02);
     }}
-    #modal-{element_id} {{
-        display: none;
-        position: fixed;
-        z-index: 9999;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        align-items: center;
-        justify-content: center;
-        padding: 2rem;
-    }}
-    #modal-{element_id} img {{
-        max-width: 90vw;
-        max-height: 90vh;
-        border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-    }}
     </style>
     <img src="data:image/png;base64,{encoded}"
          alt="Generated image"
          class="clickable-thumb-{element_id}"
-         onclick="document.getElementById('modal-{element_id}').style.display='flex';">
-    <div id="modal-{element_id}"
-         onclick="this.style.display='none';"
-         style="display:none;">
-        <img src="data:image/png;base64,{encoded}" alt="Generated image fullscreen">
-    </div>
+         onclick="window.showLightbox_{element_id}();">
     <script>
     (function() {{
-        const modal = document.getElementById('modal-{element_id}');
-        if (modal && !modal.classList.contains('enhanced')) {{
-            modal.classList.add('enhanced');
-            const observer = new MutationObserver(function(mutations) {{
-                mutations.forEach(function(mutation) {{
-                    if (mutation.attributeName === 'style' && modal.style.display === 'flex') {{
-                        document.body.style.overflow = 'hidden';
-                    }} else {{
-                        document.body.style.overflow = '';
+        if (!window.__streamlitLightbox) {{
+            window.__streamlitLightbox = {{
+                closeCurrent: function() {{
+                    const overlay = document.getElementById('streamlit-lightbox-overlay');
+                    if (overlay) {{
+                        overlay.classList.remove('visible');
+                        const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
+                        document.body.style.overflow = originalOverflow;
+                        setTimeout(function() {{
+                            if (overlay.parentNode) {{
+                                overlay.parentNode.removeChild(overlay);
+                            }}
+                        }}, 160);
                     }}
-                }});
-            }});
-            observer.observe(modal, {{ attributes: true, attributeFilter: ['style'] }});
-            document.addEventListener('keydown', function(event) {{
-                if (event.key === 'Escape' && modal.style.display === 'flex') {{
-                    modal.style.display = 'none';
                 }}
-            }});
+            }};
         }}
+        window.showLightbox_{element_id} = function() {{
+            window.__streamlitLightbox.closeCurrent();
+            const overlay = document.createElement('div');
+            overlay.id = 'streamlit-lightbox-overlay';
+            overlay.setAttribute('data-original-overflow', document.body.style.overflow || '');
+            overlay.style.position = 'fixed';
+            overlay.style.zIndex = '10000';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.right = '0';
+            overlay.style.bottom = '0';
+            overlay.style.background = 'rgba(0, 0, 0, 0.88)';
+            overlay.style.display = 'flex';
+            overlay.style.justifyContent = 'center';
+            overlay.style.alignItems = 'center';
+            overlay.style.padding = '3vw';
+            overlay.style.cursor = 'zoom-out';
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.16s ease-in-out';
+
+            const image = new Image();
+            image.src = "data:image/png;base64,{encoded}";
+            image.alt = "Generated image fullscreen";
+            image.style.maxWidth = '96vw';
+            image.style.maxHeight = '96vh';
+            image.style.borderRadius = '18px';
+            image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.45)';
+            image.style.cursor = 'inherit';
+
+            overlay.appendChild(image);
+            document.body.appendChild(overlay);
+            document.body.style.overflow = 'hidden';
+            requestAnimationFrame(function() {{
+                overlay.style.opacity = '1';
+            }});
+
+            function closeLightbox() {{
+                overlay.style.opacity = '0';
+                const originalOverflow = overlay.getAttribute('data-original-overflow') || '';
+                document.body.style.overflow = originalOverflow;
+                setTimeout(function() {{
+                    if (overlay.parentNode) {{
+                        overlay.parentNode.removeChild(overlay);
+                    }}
+                }}, 160);
+                document.removeEventListener('keydown', onKeyDown);
+            }}
+
+            function onKeyDown(event) {{
+                if (event.key === 'Escape') {{
+                    closeLightbox();
+                }}
+            }}
+
+            overlay.addEventListener('click', closeLightbox);
+            document.addEventListener('keydown', onKeyDown);
+        }};
     }})();
     </script>
     """
