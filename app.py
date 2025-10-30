@@ -353,9 +353,12 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
     image_src = f"data:image/png;base64,{encoded}"
     image_src_json = json.dumps(image_src)
-    st.markdown(
-        f'<img src="{image_src}" alt="Generated image" class="streamlit-lightbox-thumb" onclick="if(window.__streamlitLightbox){{window.__streamlitLightbox.show({image_src_json});}}">',
-        unsafe_allow_html=True,
+    components.html(
+        f"""
+        <img src="{image_src}" alt="Generated image" class="streamlit-lightbox-thumb" onclick="if(window.parent && window.parent.__streamlitLightbox){{window.parent.__streamlitLightbox.show({image_src_json});}}"/>
+        """,
+        height=0,
+        scrolling=False,
     )
 
 
