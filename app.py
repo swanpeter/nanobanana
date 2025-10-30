@@ -288,7 +288,9 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
             overlay.style.display = 'flex';
             overlay.style.justifyContent = 'center';
             overlay.style.alignItems = 'center';
-            overlay.style.padding = '3vw';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.padding = '0';
             overlay.style.cursor = 'zoom-out';
             overlay.style.opacity = '0';
             overlay.style.transition = 'opacity 0.16s ease-in-out';
@@ -296,10 +298,11 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
             const image = new Image();
             image.src = "data:image/png;base64,{encoded}";
             image.alt = "Generated image fullscreen";
-            image.style.maxWidth = '96vw';
-            image.style.maxHeight = '96vh';
-            image.style.borderRadius = '18px';
-            image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.45)';
+            image.style.maxWidth = '100vw';
+            image.style.maxHeight = '100vh';
+            image.style.objectFit = 'contain';
+            image.style.borderRadius = '0';
+            image.style.boxShadow = '0 15px 45px rgba(0, 0, 0, 0.4)';
             image.style.cursor = 'inherit';
 
             overlay.appendChild(image);
