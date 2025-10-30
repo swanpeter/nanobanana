@@ -231,7 +231,7 @@ def collect_text_parts(response: object) -> List[str]:
 
 def init_history() -> None:
     if "history" not in st.session_state:
-        st.session_state.history: List[Tuple[bytes, List[str], str]] = []
+        st.session_state.history: List[Dict[str, object]] = []
 
 
 def render_history() -> None:
@@ -239,14 +239,17 @@ def render_history() -> None:
         return
 
     st.subheader("履歴")
-    for image_bytes, texts, model_name in st.session_state.history:
-        st.image(
-            image_bytes,
-            caption=f"{model_name} で生成",
-            use_container_width=True,
-        )
-        for text in texts:
-            st.caption(text)
+    for entry in st.session_state.history:
+        image_bytes = entry.get("image_bytes")
+        prompt_text = entry.get("prompt") or ""
+        if image_bytes:
+            st.image(
+                image_bytes,
+                use_container_width=True,
+            )
+        prompt_display = prompt_text.strip()
+        st.markdown("**Prompt**")
+        st.write(prompt_display if prompt_display else "(未入力)")
         st.divider()
 
 
@@ -308,9 +311,16 @@ def main() -> None:
             st.error("画像データを取得できませんでした。")
             st.stop()
 
-        texts = collect_text_parts(response)
-
-        st.session_state.history.insert(0, (image_bytes, texts, MODEL_NAME))
+        user_prompt = prompt.strip()
+        st.session_state.history.insert(
+            0,
+            {
+                "image_bytes": image_bytes,
+                "prompt": user_prompt,
+                "model": MODEL_NAME,
+                "no_text": enforce_no_text,
+            },
+        )
         st.success("画像を生成しました。")
 
     render_history()
