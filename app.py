@@ -1,10 +1,12 @@
 import base64
-import json
 import os
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+import json
+
 import streamlit as st
+import streamlit.components.v1 as components
 
 try:
     from streamlit.runtime.secrets import StreamlitSecretNotFoundError
@@ -240,32 +242,68 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
     image_src = f"data:image/png;base64,{encoded}"
     image_src_json = json.dumps(image_src)
-    html = f"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
     <style>
-    #{element_id} {{
-        width: 100%;
-        display: block;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: transform 0.16s ease-in-out;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-        margin: 0 auto 0.75rem auto;
-    }}
-    #{element_id}:hover {{
-        transform: scale(1.02);
-    }}
+        :root {{
+            color-scheme: dark;
+        }}
+        body {{
+            margin: 0;
+            padding: 0;
+            background: transparent;
+        }}
+        img {{
+            width: 100%;
+            display: block;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.16s ease-in-out;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+        }}
+        img:hover {{
+            transform: scale(1.02);
+        }}
     </style>
-    <img id="{element_id}" src="{image_src}" alt="Generated image">
+</head>
+<body>
+    <img id="thumb" src="{image_src}" alt="Generated image">
     <script>
     (function() {{
-        const doc = window.parent.document;
-        const img = document.getElementById("{element_id}");
+        const img = document.getElementById("thumb");
         if (!img) {{
             return;
         }}
 
-        if (!window.parent.__streamlitLightbox) {{
-            window.parent.__streamlitLightbox = (function() {{
+        function resizeFrame() {{
+            const frame = window.frameElement;
+            if (!frame) {{
+                return;
+            }}
+            const frameWidth = frame.getBoundingClientRect().width || img.naturalWidth || img.clientWidth || 0;
+            const ratio = img.naturalWidth ? (img.naturalHeight / Math.max(img.naturalWidth, 1)) : (img.clientHeight / Math.max(img.clientWidth, 1) || 1);
+            const height = frameWidth ? Math.max(160, frameWidth * ratio) : (img.clientHeight || img.naturalHeight || 320);
+            frame.style.height = height + "px";
+        }}
+
+        if (img.complete) {{
+            resizeFrame();
+        }} else {{
+            img.addEventListener("load", resizeFrame);
+        }}
+        window.addEventListener("resize", resizeFrame);
+        setTimeout(resizeFrame, 60);
+
+        const parentWindow = window.parent;
+        const parentDoc = parentWindow.document;
+
+        function ensureLightbox() {{
+            if (parentWindow.__streamlitLightbox) {{
+                return;
+            }}
+            parentWindow.__streamlitLightbox = (function() {{
                 let overlay = null;
                 let keyHandler = null;
 
@@ -274,8 +312,8 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                         return;
                     }}
                     overlay.style.opacity = "0";
-                    const original = overlay.getAttribute("data-original-overflow") || "";
-                    doc.body.style.overflow = original;
+                    const originalOverflow = overlay.getAttribute("data-original-overflow") || "";
+                    parentDoc.body.style.overflow = originalOverflow;
                     setTimeout(function() {{
                         if (overlay && overlay.parentNode) {{
                             overlay.parentNode.removeChild(overlay);
@@ -283,15 +321,15 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                         overlay = null;
                     }}, 180);
                     if (keyHandler) {{
-                        window.parent.removeEventListener("keydown", keyHandler);
+                        parentWindow.removeEventListener("keydown", keyHandler);
                         keyHandler = null;
                     }}
                 }}
 
                 function show(src) {{
                     hide();
-                    overlay = doc.createElement("div");
-                    overlay.setAttribute("data-original-overflow", doc.body.style.overflow || "");
+                    overlay = parentDoc.createElement("div");
+                    overlay.id = "streamlit-lightbox-overlay";
                     overlay.style.position = "fixed";
                     overlay.style.zIndex = "10000";
                     overlay.style.top = "0";
@@ -305,14 +343,16 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                     overlay.style.cursor = "zoom-out";
                     overlay.style.opacity = "0";
                     overlay.style.transition = "opacity 0.18s ease-in-out";
+                    overlay.setAttribute("data-original-overflow", parentDoc.body.style.overflow || "");
+                    parentDoc.body.style.overflow = "hidden";
 
-                    const full = doc.createElement("img");
+                    const full = parentDoc.createElement("img");
                     full.src = src;
                     full.alt = "Generated image fullscreen";
                     full.style.maxWidth = "100vw";
                     full.style.maxHeight = "100vh";
                     full.style.objectFit = "contain";
-                    full.style.boxShadow = "0 20px 45px rgba(0, 0, 0, 0.5)";
+                    full.style.boxShadow = "0 20px 45px rgba(0,0,0,0.5)";
                     full.style.borderRadius = "0";
 
                     overlay.appendChild(full);
@@ -323,10 +363,9 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                             hide();
                         }}
                     }};
-                    window.parent.addEventListener("keydown", keyHandler);
+                    parentWindow.addEventListener("keydown", keyHandler);
 
-                    doc.body.appendChild(overlay);
-                    doc.body.style.overflow = "hidden";
+                    parentDoc.body.appendChild(overlay);
                     requestAnimationFrame(function() {{
                         overlay.style.opacity = "1";
                     }});
@@ -336,13 +375,19 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
             }})();
         }}
 
+        ensureLightbox();
+
         img.addEventListener("click", function() {{
-            window.parent.__streamlitLightbox.show({image_src_json});
+            ensureLightbox();
+            parentWindow.__streamlitLightbox.show({image_src_json});
         }});
     }})();
     </script>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+</body>
+</html>
+"""
+
+    components.html(html, height=300, scrolling=False)
 
 
 def render_history() -> None:
