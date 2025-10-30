@@ -236,99 +236,71 @@ def collect_text_parts(response: object) -> List[str]:
 def init_history() -> None:
     if "history" not in st.session_state:
         st.session_state.history: List[Dict[str, object]] = []
+    if "_lightbox_assets_injected" not in st.session_state:
+        st.session_state["_lightbox_assets_injected"] = False
 
 
-def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    image_src = f"data:image/png;base64,{encoded}"
-    image_src_json = json.dumps(image_src)
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        :root {{
-            color-scheme: dark;
-        }}
-        body {{
-            margin: 0;
-            padding: 0;
-            background: black;
-        }}
-        img {{
-            width: 100%;
-            display: block;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: transform 0.16s ease-in-out;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-        }}
-        img:hover {{
-            transform: scale(1.02);
-        }}
-    </style>
-</head>
-<body>
-    <img id="thumb" src="{image_src}" alt="Generated image">
-    <script>
-    (function() {{
-        const img = document.getElementById("thumb");
-        if (!img) {{
-            return;
-        }}
-
-        function resizeFrame() {{
-            const frame = window.frameElement;
-            if (!frame) {{
+def ensure_lightbox_assets() -> None:
+    if st.session_state.get("_lightbox_assets_injected"):
+        return
+    st.session_state["_lightbox_assets_injected"] = True
+    components.html(
+        """
+        <script>
+        (function () {
+            const parentWindow = window.parent;
+            if (!parentWindow || parentWindow.__streamlitLightboxInitialized) {
                 return;
-            }}
-            const frameWidth = frame.getBoundingClientRect().width || img.naturalWidth || img.clientWidth || 0;
-            const ratio = img.naturalWidth ? (img.naturalHeight / Math.max(img.naturalWidth, 1)) : (img.clientHeight / Math.max(img.clientWidth, 1) || 1);
-            const height = frameWidth ? Math.max(160, frameWidth * ratio) : (img.clientHeight || img.naturalHeight || 320);
-            frame.style.height = height + "px";
-        }}
+            }
+            parentWindow.__streamlitLightboxInitialized = true;
+            const doc = parentWindow.document;
 
-        if (img.complete) {{
-            resizeFrame();
-        }} else {{
-            img.addEventListener("load", resizeFrame);
-        }}
-        window.addEventListener("resize", resizeFrame);
-        setTimeout(resizeFrame, 60);
+            if (!doc.getElementById("streamlit-lightbox-style")) {
+                const style = doc.createElement("style");
+                style.id = "streamlit-lightbox-style";
+                style.textContent = `
+                .streamlit-lightbox-thumb {
+                    width: 100%;
+                    display: block;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: transform 0.16s ease-in-out;
+                    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+                    margin: 0 auto 0.75rem auto;
+                }
+                .streamlit-lightbox-thumb:hover {
+                    transform: scale(1.02);
+                }
+                `;
+                doc.head.appendChild(style);
+            }
 
-        const parentWindow = window.parent;
-        const parentDoc = parentWindow.document;
-
-        function ensureLightbox() {{
-            if (parentWindow.__streamlitLightbox) {{
-                return;
-            }}
-            parentWindow.__streamlitLightbox = (function() {{
+            parentWindow.__streamlitLightbox = (function () {
                 let overlay = null;
                 let keyHandler = null;
 
-                function hide() {{
-                    if (!overlay) {{
+                function hide() {
+                    if (!overlay) {
                         return;
-                    }}
+                    }
                     overlay.style.opacity = "0";
                     const originalOverflow = overlay.getAttribute("data-original-overflow") || "";
-                    parentDoc.body.style.overflow = originalOverflow;
-                    setTimeout(function() {{
-                        if (overlay && overlay.parentNode) {{
+                    doc.body.style.overflow = originalOverflow;
+                    setTimeout(function () {
+                        if (overlay && overlay.parentNode) {
                             overlay.parentNode.removeChild(overlay);
-                        }}
+                        }
                         overlay = null;
-                    }}, 180);
-                    if (keyHandler) {{
+                    }, 180);
+                    if (keyHandler) {
                         parentWindow.removeEventListener("keydown", keyHandler);
                         keyHandler = null;
-                    }}
-                }}
+                    }
+                }
 
-                function show(src) {{
+                function show(src) {
                     hide();
-                    overlay = parentDoc.createElement("div");
+                    overlay = doc.createElement("div");
                     overlay.id = "streamlit-lightbox-overlay";
                     overlay.style.position = "fixed";
                     overlay.style.zIndex = "10000";
@@ -343,51 +315,53 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
                     overlay.style.cursor = "zoom-out";
                     overlay.style.opacity = "0";
                     overlay.style.transition = "opacity 0.18s ease-in-out";
-                    overlay.setAttribute("data-original-overflow", parentDoc.body.style.overflow || "");
-                    parentDoc.body.style.overflow = "hidden";
+                    overlay.setAttribute("data-original-overflow", doc.body.style.overflow || "");
+                    doc.body.style.overflow = "hidden";
 
-                    const full = parentDoc.createElement("img");
+                    const full = doc.createElement("img");
                     full.src = src;
                     full.alt = "Generated image fullscreen";
                     full.style.maxWidth = "100vw";
                     full.style.maxHeight = "100vh";
                     full.style.objectFit = "contain";
-                    full.style.boxShadow = "0 20px 45px rgba(0,0,0,0.5)";
+                    full.style.boxShadow = "0 20px 45px rgba(0, 0, 0, 0.5)";
                     full.style.borderRadius = "0";
 
                     overlay.appendChild(full);
                     overlay.addEventListener("click", hide);
 
-                    keyHandler = function(event) {{
-                        if (event.key === "Escape") {{
+                    keyHandler = function (event) {
+                        if (event.key === "Escape") {
                             hide();
-                        }}
-                    }};
+                        }
+                    };
                     parentWindow.addEventListener("keydown", keyHandler);
 
-                    parentDoc.body.appendChild(overlay);
-                    requestAnimationFrame(function() {{
+                    doc.body.appendChild(overlay);
+                    requestAnimationFrame(function () {
                         overlay.style.opacity = "1";
-                    }});
-                }}
+                    });
+                }
 
-                return {{ show, hide }};
-            }})();
-        }}
+                return { show, hide };
+            })();
+        })();
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
 
-        ensureLightbox();
 
-        img.addEventListener("click", function() {{
-            ensureLightbox();
-            parentWindow.__streamlitLightbox.show({image_src_json});
-        }});
-    }})();
-    </script>
-</body>
-</html>
-"""
-
-    components.html(html, height=700, scrolling=False)
+def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
+    ensure_lightbox_assets()
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    image_src = f"data:image/png;base64,{encoded}"
+    image_src_json = json.dumps(image_src)
+    st.markdown(
+        f'<img src="{image_src}" alt="Generated image" class="streamlit-lightbox-thumb" onclick="if(window.__streamlitLightbox){{window.__streamlitLightbox.show({image_src_json});}}">',
+        unsafe_allow_html=True,
+    )
 
 
 def render_history() -> None:
