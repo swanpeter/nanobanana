@@ -253,7 +253,7 @@ def render_clickable_image(image_bytes: bytes, element_id: str) -> None:
         body {{
             margin: 0;
             padding: 0;
-            background: transparent;
+            background: black;
         }}
         img {{
             width: 100%;
