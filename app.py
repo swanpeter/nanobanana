@@ -1,4 +1,6 @@
 import base64
+import datetime
+import io
 import os
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -17,6 +19,7 @@ try:
     from google import genai
     from google.api_core import exceptions as google_exceptions
     from google.genai import types
+    from google.cloud import storage
 except ImportError:
     st.error(
         "必要なライブラリが不足しています。`pip install -r requirements.txt` を実行してください。"
@@ -324,6 +327,89 @@ def collect_text_parts(response: object) -> List[str]:
     return texts
 
 
+def _get_from_container(container: object, key: str) -> Optional[Any]:
+    if container is None:
+        return None
+    if isinstance(container, dict):
+        return container.get(key)
+    getter = getattr(container, "get", None)
+    if callable(getter):
+        try:
+            return getter(key)
+        except TypeError:
+            try:
+                return getter(key, None)
+            except TypeError:
+                return None
+    try:
+        return getattr(container, key)
+    except AttributeError:
+        return None
+
+
+def upload_image_to_gcs(
+    image_bytes: bytes,
+    filename_prefix: str = "gemini_image",
+) -> Tuple[Optional[str], Optional[str]]:
+    if not image_bytes:
+        return None, None
+
+    try:
+        secrets_obj = st.secrets
+    except StreamlitSecretNotFoundError:
+        st.warning("GCPの設定が見つからないためアップロードをスキップしました。")
+        return None, None
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"GCPの設定取得時にエラーが発生しました: {exc}")
+        return None, None
+
+    gcp_section = None
+    if isinstance(secrets_obj, dict):
+        gcp_section = secrets_obj.get("gcp")
+    else:
+        gcp_section = _get_from_container(secrets_obj, "gcp")
+
+    if not gcp_section:
+        st.warning("GCPの設定が見つからないためアップロードをスキップしました。")
+        return None, None
+
+    bucket_name = _get_from_container(gcp_section, "bucket_name")
+    service_account_json = _get_from_container(gcp_section, "service_account_json")
+    project_id = _get_from_container(gcp_section, "project_id")
+
+    if not bucket_name or not service_account_json:
+        st.warning("GCPの設定のうち bucket_name または service_account_json が不足しています。")
+        return None, None
+
+    try:
+        service_account_info = json.loads(str(service_account_json))
+    except (TypeError, json.JSONDecodeError) as exc:
+        st.error(f"service_account_json の読み込みに失敗しました: {exc}")
+        return None, None
+
+    try:
+        storage_client = storage.Client.from_service_account_info(
+            service_account_info,
+            project=str(project_id) if project_id else None,
+        )
+        bucket = storage_client.bucket(str(bucket_name))
+        timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"images/{filename_prefix}_{timestamp}_{uuid.uuid4().hex}.png"
+        blob = bucket.blob(filename)
+        blob.upload_from_file(io.BytesIO(image_bytes), content_type="image/png")
+
+        gcs_path = f"gs://{bucket.name}/{filename}"
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(hours=1),
+            method="GET",
+        )
+        return gcs_path, signed_url
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"GCSへのアップロードに失敗しました: {exc}")
+        return None, None
+
+
 def init_history() -> None:
     if "history" not in st.session_state:
         st.session_state.history: List[Dict[str, object]] = []
@@ -534,6 +620,13 @@ def render_history() -> None:
         prompt_display = prompt_text.strip()
         st.markdown("**Prompt**")
         st.write(prompt_display if prompt_display else "(未入力)")
+        gcs_path = entry.get("gcs_path")
+        signed_url = entry.get("gcs_signed_url")
+        if gcs_path:
+            st.markdown("**GCS**")
+            st.write(gcs_path)
+            if signed_url:
+                st.markdown(f"[署名付きURLを開く]({signed_url})")
         st.divider()
 
 
@@ -591,6 +684,8 @@ def main() -> None:
             st.error("画像データを取得できませんでした。")
             st.stop()
 
+        gcs_path, gcs_signed_url = upload_image_to_gcs(image_bytes)
+
         user_prompt = prompt.strip()
         st.session_state.history.insert(
             0,
@@ -600,9 +695,17 @@ def main() -> None:
                 "prompt": user_prompt,
                 "model": MODEL_NAME,
                 "no_text": True,
+                "gcs_path": gcs_path,
+                "gcs_signed_url": gcs_signed_url,
             },
         )
         st.success("画像を生成しました。")
+        if gcs_path or gcs_signed_url:
+            st.info("生成した画像をGCSへアップロードしました。")
+            if gcs_path:
+                st.write(f"GCSパス: {gcs_path}")
+            if gcs_signed_url:
+                st.markdown(f"[署名付きURLを開く]({gcs_signed_url})")
 
     render_history()
 
