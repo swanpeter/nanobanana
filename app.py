@@ -635,7 +635,10 @@ def render_history() -> None:
             render_clickable_image(image_bytes, image_id)
         prompt_display = prompt_text.strip()
         st.markdown("**Prompt**")
-        st.write(prompt_display if prompt_display else "(未入力)")
+        if prompt_display:
+            st.text(prompt_display)
+        else:
+            st.text("(未入力)")
         st.divider()
 
 
