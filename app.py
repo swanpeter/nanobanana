@@ -547,8 +547,6 @@ def main() -> None:
     api_key = load_configured_api_key()
 
     prompt = st.text_area("Prompt", height=150, placeholder="描いてほしい内容を入力してください")
-    enforce_no_text = st.toggle("画像にテキストや文字を含めない", value=False)
-
     if st.button("Generate", type="primary"):
         if not api_key:
             st.warning("Gemini API key が設定されていません。Streamlit secrets などで設定してください。")
@@ -559,13 +557,11 @@ def main() -> None:
 
         client = genai.Client(api_key=api_key.strip())
         stripped_prompt = prompt.rstrip()
-        prompt_for_request = (
-            f"{stripped_prompt}\n{DEFAULT_PROMPT_SUFFIX}"
-            if stripped_prompt
-            else DEFAULT_PROMPT_SUFFIX
-        )
-        if enforce_no_text:
-            prompt_for_request = f"{prompt_for_request}\n{NO_TEXT_TOGGLE_SUFFIX}"
+        prompt_components: List[str] = []
+        if stripped_prompt:
+            prompt_components.append(stripped_prompt)
+        prompt_components.extend([DEFAULT_PROMPT_SUFFIX, NO_TEXT_TOGGLE_SUFFIX])
+        prompt_for_request = "\n".join(prompt_components)
 
         with st.spinner("画像を生成しています..."):
             try:
@@ -603,7 +599,7 @@ def main() -> None:
                 "image_bytes": image_bytes,
                 "prompt": user_prompt,
                 "model": MODEL_NAME,
-                "no_text": enforce_no_text,
+                "no_text": True,
             },
         )
         st.success("画像を生成しました。")
