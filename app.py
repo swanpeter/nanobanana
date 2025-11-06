@@ -636,13 +636,6 @@ def render_history() -> None:
         prompt_display = prompt_text.strip()
         st.markdown("**Prompt**")
         st.write(prompt_display if prompt_display else "(未入力)")
-        gcs_path = entry.get("gcs_path")
-        signed_url = entry.get("gcs_signed_url")
-        if gcs_path:
-            st.markdown("**GCS**")
-            st.write(gcs_path)
-            if signed_url:
-                st.markdown(f"[署名付きURLを開く]({signed_url})")
         st.divider()
 
 
@@ -700,7 +693,7 @@ def main() -> None:
             st.error("画像データを取得できませんでした。")
             st.stop()
 
-        gcs_path, gcs_signed_url = upload_image_to_gcs(image_bytes)
+        upload_image_to_gcs(image_bytes)
 
         user_prompt = prompt.strip()
         st.session_state.history.insert(
@@ -711,17 +704,9 @@ def main() -> None:
                 "prompt": user_prompt,
                 "model": MODEL_NAME,
                 "no_text": True,
-                "gcs_path": gcs_path,
-                "gcs_signed_url": gcs_signed_url,
             },
         )
-        st.success("画像を生成しました。")
-        if gcs_path or gcs_signed_url:
-            st.info("生成した画像をGCSへアップロードしました。")
-            if gcs_path:
-                st.write(f"GCSパス: {gcs_path}")
-            if gcs_signed_url:
-                st.markdown(f"[署名付きURLを開く]({gcs_signed_url})")
+        st.success("生成完了")
 
     render_history()
 
