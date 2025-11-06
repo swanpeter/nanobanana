@@ -381,10 +381,26 @@ def upload_image_to_gcs(
         st.warning("GCPの設定のうち bucket_name または service_account_json が不足しています。")
         return None, None
 
-    try:
-        service_account_info = json.loads(str(service_account_json))
-    except (TypeError, json.JSONDecodeError) as exc:
-        st.error(f"service_account_json の読み込みに失敗しました: {exc}")
+    service_account_info: Optional[Dict[str, Any]] = None
+    if isinstance(service_account_json, (dict,)):
+        service_account_info = dict(service_account_json)
+    elif isinstance(service_account_json, (str, bytes)):
+        raw_json = service_account_json.decode("utf-8") if isinstance(service_account_json, bytes) else service_account_json
+        raw_json = raw_json.strip()
+        try:
+            service_account_info = json.loads(raw_json)
+        except json.JSONDecodeError:
+            try:
+                service_account_info = json.loads(raw_json, strict=False)
+            except json.JSONDecodeError as exc:
+                st.error(f"service_account_json の読み込みに失敗しました: {exc}")
+                return None, None
+    else:
+        st.error("service_account_json の形式が不明です。文字列または辞書で設定してください。")
+        return None, None
+
+    if not isinstance(service_account_info, dict):
+        st.error("service_account_json の内容が辞書形式ではありません。")
         return None, None
 
     try:
