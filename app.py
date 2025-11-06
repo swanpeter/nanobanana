@@ -538,7 +538,7 @@ def render_history() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title=TITLE, page_icon="🖼️", layout="centered")
+    st.set_page_config(page_title=TITLE, page_icon="🧠", layout="centered")
     init_history()
     require_login()
 
