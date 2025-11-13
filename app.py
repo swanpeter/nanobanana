@@ -146,8 +146,6 @@ def get_configured_auth_credentials() -> Tuple[str, str]:
 def require_login() -> None:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-    if "current_username" not in st.session_state:
-        st.session_state["current_username"] = None
 
     if st.session_state["authenticated"]:
         return
@@ -168,7 +166,6 @@ def require_login() -> None:
     if submitted:
         if input_username == username and input_password == password:
             st.session_state["authenticated"] = True
-            st.session_state["current_username"] = (input_username or "").strip() or None
             st.success("ログインしました。")
             rerun_app()
             return
@@ -364,16 +361,16 @@ def sanitize_filename_component(value: str, max_length: int = 80) -> str:
         sanitized_chars.append(char)
     sanitized = "".join(sanitized_chars).strip("_")
     if not sanitized:
-        sanitized = "untitled"
+        sanitized = "prompt"
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length]
     return sanitized
 
 
-def build_prompt_filename(username: Optional[str], prompt_text: str) -> str:
-    user_component = sanitize_filename_component(username or "user", max_length=32)
-    prompt_component = sanitize_filename_component(prompt_text or "prompt", max_length=96)
-    return f"{user_component}_{prompt_component}.png"
+def build_prompt_based_filename(prompt_text: str) -> str:
+    prompt_component = sanitize_filename_component(prompt_text or "prompt", max_length=80)
+    unique_suffix = uuid.uuid4().hex
+    return f"user01_{prompt_component}_{unique_suffix}.png"
 
 
 def upload_image_to_gcs(
@@ -443,6 +440,7 @@ def upload_image_to_gcs(
             cleaned_object_name = object_name.strip()
             if not cleaned_object_name.lower().endswith(".png"):
                 cleaned_object_name = f"{cleaned_object_name}.png"
+            cleaned_object_name = cleaned_object_name.replace("/", "_").replace("\\", "_")
             filename = f"images/{cleaned_object_name}"
         else:
             timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -733,10 +731,7 @@ def main() -> None:
             st.stop()
 
         user_prompt = prompt.strip()
-        object_name = build_prompt_filename(
-            st.session_state.get("current_username"),
-            user_prompt or "prompt",
-        )
+        object_name = build_prompt_based_filename(user_prompt)
         upload_image_to_gcs(image_bytes, object_name=object_name)
 
         st.session_state.history.insert(
