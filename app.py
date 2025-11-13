@@ -348,15 +348,15 @@ def _get_from_container(container: object, key: str) -> Optional[Any]:
 
 
 def sanitize_filename_component(value: str, max_length: int = 80) -> str:
-    text = (value or "").strip()
+    text = value or ""
     sanitized_chars: List[str] = []
     for char in text:
+        if char in {"\n", "\r"}:
+            sanitized_chars.append("-n-")
+            continue
         if ord(char) < 32:
             continue
         if char in {'\\', '/', ':', '*', '?', '"', '<', '>', '|'}:
-            continue
-        if char in {"\n", "\r"}:
-            sanitized_chars.append("-n-")
             continue
         if char.isspace():
             sanitized_chars.append("_")
