@@ -355,6 +355,9 @@ def sanitize_filename_component(value: str, max_length: int = 80) -> str:
             continue
         if char in {'\\', '/', ':', '*', '?', '"', '<', '>', '|'}:
             continue
+        if char in {"\n", "\r"}:
+            sanitized_chars.append("-n-")
+            continue
         if char.isspace():
             sanitized_chars.append("_")
             continue
