@@ -58,7 +58,6 @@ def rerun_app() -> None:
 
 TITLE = "Gemini 画像生成"
 MODEL_NAME = "models/gemini-2.5-flash-image-preview"
-IMAGE_ASPECT_RATIO = "16:9"
 DEFAULT_PROMPT_SUFFIX = (
     "((masterpiece, best quality, ultra-detailed, photorealistic, 8k, sharp focus))"
 )
@@ -713,7 +712,6 @@ def main() -> None:
                     contents=prompt_for_request,
                     config=types.GenerateContentConfig(
                         response_modalities=["TEXT", "IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio=IMAGE_ASPECT_RATIO),
                     ),
                 )
             except google_exceptions.ResourceExhausted:
