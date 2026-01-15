@@ -9,10 +9,6 @@ import json
 
 import streamlit as st
 import streamlit.components.v1 as components
-try:
-    from streamlit_cookies_controller import CookieController
-except ImportError:
-    CookieController = None
 
 try:
     from streamlit.runtime.secrets import StreamlitSecretNotFoundError
@@ -63,7 +59,6 @@ def rerun_app() -> None:
 TITLE = "Gemini 画像生成"
 MODEL_NAME = "models/gemini-2.5-flash-image-preview"
 IMAGE_ASPECT_RATIO = "16:9"
-COOKIE_KEY = "logged_in"
 DEFAULT_PROMPT_SUFFIX = (
     "((masterpiece, best quality, ultra-detailed, photorealistic, 8k, sharp focus))"
 )
@@ -149,54 +144,9 @@ def get_configured_auth_credentials() -> Tuple[str, str]:
     return "mezamashi", "mezamashi"
 
 
-def _get_cookie_controller() -> Optional[object]:
-    if CookieController is None:
-        return None
-    controller = st.session_state.get("_cookie_controller")
-    if controller is None:
-        try:
-            controller = CookieController()
-        except Exception:
-            return None
-        st.session_state["_cookie_controller"] = controller
-    return controller
-
-
-def restore_login_from_cookie() -> bool:
-    controller = _get_cookie_controller()
-    if controller is None:
-        return False
-    try:
-        return controller.get(COOKIE_KEY) == "1"
-    except Exception:
-        return False
-
-
-def persist_login_to_cookie(value: bool) -> None:
-    controller = _get_cookie_controller()
-    if controller is None:
-        return
-    try:
-        if value:
-            controller.set(COOKIE_KEY, "1")
-        else:
-            controller.remove(COOKIE_KEY)
-    except Exception:
-        return
-
-
-def logout() -> None:
-    st.session_state["authenticated"] = False
-    persist_login_to_cookie(False)
-    rerun_app()
-
-
 def require_login() -> None:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-
-    if not st.session_state["authenticated"] and restore_login_from_cookie():
-        st.session_state["authenticated"] = True
 
     if st.session_state["authenticated"]:
         return
@@ -217,7 +167,6 @@ def require_login() -> None:
     if submitted:
         if input_username == username and input_password == password:
             st.session_state["authenticated"] = True
-            persist_login_to_cookie(True)
             st.success("ログインしました。")
             rerun_app()
             return
@@ -735,10 +684,6 @@ def main() -> None:
     st.set_page_config(page_title=TITLE, page_icon="🧠", layout="centered")
     init_history()
     require_login()
-
-    with st.sidebar:
-        if st.button("ログアウト"):
-            logout()
 
     st.title("脳内大喜利")
 

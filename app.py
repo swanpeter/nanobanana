@@ -2,6 +2,7 @@ import base64
 import datetime
 import io
 import os
+import tempfile
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -64,6 +65,8 @@ TITLE = "Gemini 画像生成"
 MODEL_NAME = "models/gemini-2.5-flash-image-preview"
 IMAGE_ASPECT_RATIO = "16:9"
 COOKIE_KEY = "logged_in"
+SESSION_COOKIE_KEY = "browser_session_id"
+HISTORY_DIR = os.path.join(tempfile.gettempdir(), "nanobanana_history")
 DEFAULT_PROMPT_SUFFIX = (
     "((masterpiece, best quality, ultra-detailed, photorealistic, 8k, sharp focus))"
 )
@@ -162,6 +165,20 @@ def _get_cookie_controller() -> Optional[object]:
     return controller
 
 
+def _prime_cookie_controller() -> None:
+    controller = _get_cookie_controller()
+    if controller is None:
+        return
+    if st.session_state.get("_cookies_initialized"):
+        return
+    st.session_state["_cookies_initialized"] = True
+    try:
+        controller.get(COOKIE_KEY)
+    except Exception:
+        return
+    rerun_app()
+
+
 def restore_login_from_cookie() -> bool:
     controller = _get_cookie_controller()
     if controller is None:
@@ -185,18 +202,133 @@ def persist_login_to_cookie(value: bool) -> None:
         return
 
 
+def _get_history_path(session_id: str) -> str:
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    safe_id = "".join(ch for ch in session_id if ch.isalnum() or ch in {"-", "_"})
+    return os.path.join(HISTORY_DIR, f"{safe_id}.json")
+
+
+def get_browser_session_id(create: bool = True) -> Optional[str]:
+    controller = _get_cookie_controller()
+    if controller is None:
+        return None
+    try:
+        session_id = controller.get(SESSION_COOKIE_KEY)
+    except Exception:
+        session_id = None
+    if session_id:
+        return str(session_id)
+    if not create:
+        return None
+    new_id = uuid.uuid4().hex
+    try:
+        controller.set(SESSION_COOKIE_KEY, new_id)
+    except Exception:
+        return None
+    return new_id
+
+
+def _serialize_history(history: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    serialized: List[Dict[str, object]] = []
+    for entry in history:
+        image_bytes = entry.get("image_bytes")
+        if isinstance(image_bytes, (bytes, bytearray, memoryview)):
+            image_b64 = base64.b64encode(bytes(image_bytes)).decode("utf-8")
+        else:
+            image_b64 = None
+        serialized.append(
+            {
+                "id": entry.get("id"),
+                "prompt": entry.get("prompt"),
+                "model": entry.get("model"),
+                "no_text": entry.get("no_text"),
+                "image_b64": image_b64,
+            }
+        )
+    return serialized
+
+
+def _deserialize_history(payload: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    history: List[Dict[str, object]] = []
+    for entry in payload:
+        image_b64 = entry.get("image_b64")
+        image_bytes = decode_image_data(image_b64) if image_b64 else None
+        history.append(
+            {
+                "id": entry.get("id"),
+                "prompt": entry.get("prompt"),
+                "model": entry.get("model"),
+                "no_text": entry.get("no_text"),
+                "image_bytes": image_bytes,
+            }
+        )
+    return history
+
+
+def load_history_from_storage() -> Optional[List[Dict[str, object]]]:
+    session_id = get_browser_session_id(create=False)
+    if not session_id:
+        return None
+    history_path = _get_history_path(session_id)
+    if not os.path.exists(history_path):
+        return None
+    try:
+        with open(history_path, "r", encoding="utf-8") as file_handle:
+            payload = json.load(file_handle)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    entries = payload.get("history")
+    if not isinstance(entries, list):
+        return None
+    return _deserialize_history(entries)
+
+
+def persist_history_to_storage() -> None:
+    session_id = get_browser_session_id(create=True)
+    if not session_id:
+        return
+    history_path = _get_history_path(session_id)
+    payload = {
+        "updated_at": datetime.datetime.utcnow().isoformat(),
+        "history": _serialize_history(st.session_state.history),
+    }
+    try:
+        with open(history_path, "w", encoding="utf-8") as file_handle:
+            json.dump(payload, file_handle)
+    except Exception:
+        return
+
+
+def clear_history_storage() -> None:
+    session_id = get_browser_session_id(create=False)
+    if not session_id:
+        return
+    history_path = _get_history_path(session_id)
+    try:
+        if os.path.exists(history_path):
+            os.remove(history_path)
+    except Exception:
+        return
+
+
 def logout() -> None:
     st.session_state["authenticated"] = False
     persist_login_to_cookie(False)
+    clear_history_storage()
+    st.session_state.history = []
     rerun_app()
 
 
 def require_login() -> None:
+    _prime_cookie_controller()
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"] and restore_login_from_cookie():
         st.session_state["authenticated"] = True
+        get_browser_session_id(create=True)
 
     if st.session_state["authenticated"]:
         return
@@ -218,6 +350,7 @@ def require_login() -> None:
         if input_username == username and input_password == password:
             st.session_state["authenticated"] = True
             persist_login_to_cookie(True)
+            get_browser_session_id(create=True)
             st.success("ログインしました。")
             rerun_app()
             return
@@ -517,7 +650,15 @@ def upload_image_to_gcs(
 
 def init_history() -> None:
     if "history" not in st.session_state:
-        st.session_state.history: List[Dict[str, object]] = []
+        st.session_state.history = []
+    if not st.session_state.get("_history_loaded"):
+        restored = load_history_from_storage()
+        if restored is not None:
+            st.session_state.history = restored
+            st.session_state["_history_loaded"] = True
+        else:
+            if get_browser_session_id(create=False) is not None or _get_cookie_controller() is None:
+                st.session_state["_history_loaded"] = True
 
 
 def ensure_lightbox_assets() -> None:
@@ -804,6 +945,7 @@ def main() -> None:
                 "no_text": True,
             },
         )
+        persist_history_to_storage()
         st.success("生成完了")
 
     render_history()
