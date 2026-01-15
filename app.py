@@ -165,18 +165,25 @@ def _get_cookie_controller() -> Optional[object]:
     return controller
 
 
-def _prime_cookie_controller() -> None:
+def sync_cookie_controller() -> None:
     controller = _get_cookie_controller()
     if controller is None:
         return
-    if st.session_state.get("_cookies_initialized"):
+    sync_stage = st.session_state.get("_cookies_sync_stage", 0)
+    if sync_stage == 0:
+        try:
+            controller.refresh()
+        except Exception:
+            return
+        st.session_state["_cookies_sync_stage"] = 1
+        rerun_app()
         return
-    st.session_state["_cookies_initialized"] = True
-    try:
-        controller.get(COOKIE_KEY)
-    except Exception:
-        return
-    rerun_app()
+    if sync_stage == 1:
+        try:
+            controller.refresh()
+        except Exception:
+            return
+        st.session_state["_cookies_sync_stage"] = 2
 
 
 def restore_login_from_cookie() -> bool:
@@ -322,7 +329,6 @@ def logout() -> None:
 
 
 def require_login() -> None:
-    _prime_cookie_controller()
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
@@ -874,6 +880,7 @@ def render_history() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=TITLE, page_icon="🧠", layout="centered")
+    sync_cookie_controller()
     init_history()
     require_login()
 
