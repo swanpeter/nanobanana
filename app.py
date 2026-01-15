@@ -337,7 +337,7 @@ def logout() -> None:
     rerun_app()
 
 
-def require_login() -> bool:
+def require_login() -> None:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
@@ -346,33 +346,31 @@ def require_login() -> bool:
         get_browser_session_id(create=True)
 
     if st.session_state["authenticated"]:
-        return True
+        return
 
-    login_container = st.container()
-    with login_container:
-        st.title("ログイン")
+    st.title("ログイン")
 
-        username, password = get_configured_auth_credentials()
-        if not username or not password:
-            st.info("ログイン情報が未設定です。管理者に連絡してください。")
-            st.stop()
-            return False
+    username, password = get_configured_auth_credentials()
+    if not username or not password:
+        st.info("ログイン情報が未設定です。管理者に連絡してください。")
+        st.stop()
+        return
 
-        with st.form("login_form", clear_on_submit=False):
-            input_username = st.text_input("ID")
-            input_password = st.text_input("PASS", type="password")
-            submitted = st.form_submit_button("ログイン")
+    with st.form("login_form", clear_on_submit=False):
+        input_username = st.text_input("ID")
+        input_password = st.text_input("PASS", type="password")
+        submitted = st.form_submit_button("ログイン")
 
-        if submitted:
-            if input_username == username and input_password == password:
-                st.session_state["authenticated"] = True
-                persist_login_to_cookie(True)
-                get_browser_session_id(create=True)
-                login_container.empty()
-                return True
-            st.error("IDまたはPASSが正しくありません。")
+    if submitted:
+        if input_username == username and input_password == password:
+            st.session_state["authenticated"] = True
+            persist_login_to_cookie(True)
+            get_browser_session_id(create=True)
+            st.success("ログインしました。")
+            rerun_app()
+            return
+        st.error("IDまたはPASSが正しくありません。")
     st.stop()
-    return False
 
 
 def get_current_api_key() -> Optional[str]:
@@ -893,8 +891,7 @@ def main() -> None:
     st.set_page_config(page_title=TITLE, page_icon="🧠", layout="centered")
     sync_cookie_controller()
     init_history()
-    if not require_login():
-        return
+    require_login()
 
     with st.sidebar:
         if st.button("ログアウト"):
