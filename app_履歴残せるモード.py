@@ -191,15 +191,10 @@ def restore_login_from_cookie() -> bool:
     controller = _get_cookie_controller()
     if controller is None:
         return False
-    for _ in range(2):
-        try:
-            controller.refresh()
-            if controller.get(COOKIE_KEY) == "1":
-                return True
-        except Exception:
-            return False
-        time.sleep(0.3)
-    return False
+    try:
+        return controller.get(COOKIE_KEY) == "1"
+    except Exception:
+        return False
 
 
 def persist_login_to_cookie(value: bool) -> None:
@@ -227,7 +222,6 @@ def get_browser_session_id(create: bool = True) -> Optional[str]:
     if controller is None:
         return None
     try:
-        controller.refresh()
         session_id = controller.get(SESSION_COOKIE_KEY)
     except Exception:
         session_id = None
