@@ -3,6 +3,7 @@ import datetime
 import io
 import os
 import tempfile
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -203,6 +204,7 @@ def persist_login_to_cookie(value: bool) -> None:
     try:
         if value:
             controller.set(COOKIE_KEY, "1")
+            time.sleep(0.6)
         else:
             controller.remove(COOKIE_KEY)
     except Exception:
@@ -230,6 +232,7 @@ def get_browser_session_id(create: bool = True) -> Optional[str]:
     new_id = uuid.uuid4().hex
     try:
         controller.set(SESSION_COOKIE_KEY, new_id)
+        time.sleep(0.6)
     except Exception:
         return None
     return new_id
