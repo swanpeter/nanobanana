@@ -191,10 +191,15 @@ def restore_login_from_cookie() -> bool:
     controller = _get_cookie_controller()
     if controller is None:
         return False
-    try:
-        return controller.get(COOKIE_KEY) == "1"
-    except Exception:
-        return False
+    for _ in range(2):
+        try:
+            controller.refresh()
+            if controller.get(COOKIE_KEY) == "1":
+                return True
+        except Exception:
+            return False
+        time.sleep(0.3)
+    return False
 
 
 def persist_login_to_cookie(value: bool) -> None:
@@ -222,6 +227,7 @@ def get_browser_session_id(create: bool = True) -> Optional[str]:
     if controller is None:
         return None
     try:
+        controller.refresh()
         session_id = controller.get(SESSION_COOKIE_KEY)
     except Exception:
         session_id = None
@@ -331,6 +337,51 @@ def logout() -> None:
     rerun_app()
 
 
+def inject_login_autofill_js() -> None:
+    components.html(
+        """
+        <script>
+        (function () {
+            const parent = window.parent;
+            if (!parent || !parent.document) {
+                return;
+            }
+            const doc = parent.document;
+            const inputs = Array.from(doc.querySelectorAll("input"));
+            if (!inputs.length) {
+                return;
+            }
+            let userInput = null;
+            let passInput = null;
+            for (const input of inputs) {
+                const label = (input.getAttribute("aria-label") || "").toLowerCase();
+                if (!userInput && (label === "id" || label === "user" || label === "username")) {
+                    userInput = input;
+                }
+                if (!passInput && (label === "pass" || label === "password")) {
+                    passInput = input;
+                }
+            }
+            if (userInput) {
+                userInput.setAttribute("name", "username");
+                userInput.setAttribute("autocomplete", "username");
+            }
+            if (passInput) {
+                passInput.setAttribute("name", "password");
+                passInput.setAttribute("autocomplete", "current-password");
+            }
+            const form = userInput ? userInput.form : null;
+            if (form) {
+                form.setAttribute("autocomplete", "on");
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
 def require_login() -> None:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
@@ -354,6 +405,8 @@ def require_login() -> None:
         input_username = st.text_input("ID")
         input_password = st.text_input("PASS", type="password")
         submitted = st.form_submit_button("ログイン")
+
+    inject_login_autofill_js()
 
     if submitted:
         if input_username == username and input_password == password:
