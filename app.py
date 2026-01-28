@@ -63,7 +63,7 @@ def rerun_app() -> None:
 
 
 TITLE = "Gemini 画像生成"
-MODEL_NAME = "models/gemini-2.5-flash-image-preview"
+MODEL_NAME = "models/gemini-2.5-flash-image"
 IMAGE_ASPECT_RATIO = "16:9"
 COOKIE_KEY = "logged_in"
 SESSION_COOKIE_KEY = "browser_session_id"
