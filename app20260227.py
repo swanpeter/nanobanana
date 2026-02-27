@@ -63,11 +63,7 @@ def rerun_app() -> None:
 
 
 TITLE = "Gemini 画像生成"
-MODEL_OPTIONS: Tuple[str, ...] = (
-    "models/gemini-2.5-flash-image",
-    "models/gemini-3.1-flash-image-preview",
-)
-MODEL_NAME = "models/gemini-3.1-flash-image-preview"
+MODEL_NAME = "models/gemini-2.5-flash-image"
 IMAGE_ASPECT_RATIO = "16:9"
 COOKIE_KEY = "logged_in"
 SESSION_COOKIE_KEY = "browser_session_id"
@@ -944,14 +940,7 @@ def main() -> None:
     init_history()
     require_login()
 
-    default_model_index = MODEL_OPTIONS.index(MODEL_NAME) if MODEL_NAME in MODEL_OPTIONS else 0
     with st.sidebar:
-        selected_model = st.selectbox(
-            "Model",
-            options=MODEL_OPTIONS,
-            index=default_model_index,
-            key="model_name",
-        )
         if st.button("ログアウト"):
             logout()
 
@@ -979,7 +968,7 @@ def main() -> None:
         with st.spinner("画像を生成しています..."):
             try:
                 response = client.models.generate_content(
-                    model=selected_model,
+                    model=MODEL_NAME,
                     contents=prompt_for_request,
                     config=types.GenerateContentConfig(
                         response_modalities=["TEXT", "IMAGE"],
@@ -1015,7 +1004,7 @@ def main() -> None:
                 "id": f"img_{uuid.uuid4().hex}",
                 "image_bytes": image_bytes,
                 "prompt": user_prompt,
-                "model": selected_model,
+                "model": MODEL_NAME,
                 "no_text": True,
             },
         )
